@@ -54,7 +54,7 @@ io.on("connection", (socket) => {
 
     //отправка и сохранение сообщений
     socket.on("sendMessage", (data) => {
-        const {senderId, receiverName, message} = data;
+        const {senderid, receiverName, message} = data;
         db.get("select id from users where name = ?", [receiverName], (err, row) => {
             if(err || !row) {
                 //уведомление отправителю
@@ -62,16 +62,16 @@ io.on("connection", (socket) => {
                 return;
             } 
             //получаем id получателя сообщения
-            const receiverId = row.id;
+            const receiverid = row.id;
 
-            db.run("insert into messages(senderid, receiverid, message) values(?,?,?)", [senderId, receiverId, message], (err) => {
+            db.run("insert into messages(senderid, receiverid, message) values(?,?,?)", [senderid, receiverid, message], (err) => {
                 if(err) {
                     console.error(err);
                     //уведомление отправителю
                     socket.emit("error", "Сообщение не отправлено");
                 } else {
                     //уведомление отправителю и получателю
-                    io.emit("newMessage", {senderId, receiverId, message});
+                    io.emit("newMessage", {senderid, receiverid, message});
                 }
             })
         })
