@@ -37,6 +37,7 @@ io.on("connection", (socket) => {
             //если пользователь найден - отправляем его id
             else if(row) {
                 callback({success: true, userId: row.id});
+                console.log("Пользователь найден: " + row);
             } 
             //если нет ошибки и пользователь не найден, значит, такого нет. создаем нового
             else {
@@ -46,6 +47,7 @@ io.on("connection", (socket) => {
                         callback({success: false, error: "Ошибка добавления пользователя"});
                     } else {
                         callback({success: true, userId: this.lastID});
+                        console.log("Пользователь добалвен в БД");
                     }
                 })
             }
@@ -72,6 +74,7 @@ io.on("connection", (socket) => {
                 } else {
                     //уведомление отправителю и получателю
                     io.emit("newMessage", {senderid, receiverid, message});
+                    console.log("Сообщение добалвено в БД и отправлено пользователям");
                 }
             })
         })
@@ -108,6 +111,7 @@ io.on("connection", (socket) => {
                     callback([]);
                 } else {
                     callback(rows);
+                    console.log("Переписка отправлена");
                 }
             })
         })
