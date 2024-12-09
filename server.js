@@ -1,7 +1,7 @@
 const express = require("express");
 const { Server } = require("socket.io");
 const http = require("http");
-const sqlite3 = require("sqlite3").verbose();
+const mysql = require("mysql2/promise");
 
 const app = express();
 const server = http.createServer(app);
@@ -11,110 +11,106 @@ const io = new Server(server, {
     },
 });
 
-const db = new sqlite3.Database("./chat.db", (err) => {
-    if(err) {
-        console.error("Ошибка подключения к БД: ", err);
-    }
-    else {
-        console.log("Подключено к БД chat.db");
-
-        db.run("create table if not exists users(id integer primary key autoincrement, name text unique not null)");
-        db.run("create table if not exists messages(id integer primary key autoincrement, senderid integer, receiverid integer, message text, timestamp datetime default current_timestamp, foreign key(senderid) references users(id), foreign key(receiverid) references users(id))");
-    }
+const pool = mysql.createPool({
+    host: "sql7.freesqldatabase.com",
+    user: "sql7750782",
+    password: "d9yAiVKdJA",
+    database: "sql7750782"
 })
+//инициализация БД
+async function initializeDatabase() {
+    try {
+        const connection = await pool.getConnection();
+        console.log("Подключено к БД chat");
+        await connection.query("create table if not exists users(id int primary key auto_increment, name varchar(100) unique not null)");
+        await connection.query("create table if not exists messages(id int primary key auto_increment, senderid int, receiverid int, message varchar(1000), timestamp timestamp default current_timestamp, foreign key(senderid) references users(id), foreign key(receiverid) references users(id))");
+        console.log("Таблицы успешно созданы");
+        connection.release();
+    } catch (error) {
+        console.error("Ошибка инициализации базы данных: ",  error);
+    }
+};
+
+initializeDatabase();
 
 io.on("connection", (socket) => {
     console.log("Пользователь подключился");
 
     //проверка существования пользователя или создание нового
-    socket.on("checkUser", (name, callback) => {
-        db.get("select id from users where name = ?", [name], (err, row) => {
-            //если ошибка запроса - отправляем ее текст
-            if(err) {
-                console.error(err);
-                callback({success: false, error: "Ошибка БД"});
-            } 
-            //если пользователь найден - отправляем его id
-            else if(row) {
-                callback({success: true, userId: row.id});
-                console.log("Пользователь найден: " + row);
-            } 
-            //если нет ошибки и пользователь не найден, значит, такого нет. создаем нового
-            else {
-                db.run("insert into users(name) values(?)", [name], (err) => {
-                    if(err) {
-                        console.error(err);
-                        callback({success: false, error: "Ошибка добавления пользователя"});
-                    } else {
-                        callback({success: true, userId: this.lastID});
-                        console.log("Пользователь добалвен в БД");
-                    }
-                })
+    socket.on("checkUser", async(name, callback) => {
+        try {
+            const [rows] = await pool.query("select id from users where name = ?", [name]);
+            if(rows.length > 0) {
+                //если пользователь найден, отправляем его id
+                callback({success: true, userId: rows[0].id});
+                console.log("Пользователь найден: " + name);
+            } else {
+                //если пользователь не найден, добавляем нового
+                const [result] = await pool.query("insert into users(name) values(?)", [name]);
+                callback({success: true, userId: result.insertId});
+                console.log("Пользователь добавлен в БД");
             }
-        })
+        } catch (error) {
+            console.error(error);
+            callback({success: false, error: "Ошибка БД"});
+        }
     })
 
     //отправка и сохранение сообщений
-    socket.on("sendMessage", (data) => {
+    socket.on("sendMessage", async(data) => {
         const {senderid, receiverName, message} = data;
-        db.get("select id from users where name = ?", [receiverName], (err, row) => {
-            if(err || !row) {
+        try {
+            const [rows] = await pool.query("select id from users where name = ?", [receiverName]);
+            if(rows.length === 0) {
                 //уведомление отправителю
                 socket.emit("error", "Получатель не найден");
                 return;
-            } 
+            }
             //получаем id получателя сообщения
-            const receiverid = row.id;
-
-            db.run("insert into messages(senderid, receiverid, message) values(?,?,?)", [senderid, receiverid, message], (err) => {
-                if(err) {
-                    console.error(err);
-                    //уведомление отправителю
-                    socket.emit("error", "Сообщение не отправлено");
-                } else {
-                    //уведомление отправителю и получателю
-                    io.emit("newMessage", {senderid, receiverid, message});
-                    console.log("Сообщение добалвено в БД и отправлено пользователям");
-                }
-            })
-        })
+            const receiverid = rows[0].id;
+            await pool.query("insert into messages(senderid, receiverid, message) values(?,?,?)", [senderid, receiverid, message]);
+            //уведомление отправителю и получателю
+            io.emit("newMessage", {senderid, receiverid, message});
+            console.log("Сообщение добалвено в БД и отправлено пользователям");
+        } catch (error) {
+            console.error(error);
+            //уведомление отправителю
+            socket.emit("error", "Сообщение не отправлено");
+        }
     })
 
     //получение списка пользователей
-    socket.on("getUsers", (callback) => {
-        db.all("select name from users", [], (err, rows) => {
-            if(err) {
-                console.error(err);
-                callback([]);
-            } else {
-                //отправляем только имена
-                callback(rows.map((row) => row.name));
-            }
-        })
+    socket.on("getUsers", async(callback) => {
+        try {
+            const [rows] = await pool.query("select name from users");
+            //отправляем только имена
+            callback(rows.map((row) => row.name));
+        } catch (error) {
+            console.error(error);
+            callback([]);
+        }
     })
 
     //загрузка переписки между двумя пользователями
-    socket.on("getMessages", (data, callback) => {
+    socket.on("getMessages", async(data, callback) => {
         const {userId, receiverUserName} = data;
         //находим id получателя
-        db.get("select id from users where name = ?", [receiverUserName], (err, row) => {
-            if(err || !row) {
+        try {
+            const [rows] = await pool.query("select id from users where name = ?", [receiverUserName]);
+            if(rows.length === 0) {
                 callback([]);
                 return;
             }
-            const receiverUserId = row.id;
+            const receiverUserId = rows[0].id;
 
             //загружаем сообщения между двумя пользователями в случае если мы отправитель, а другой получатель, и наоборот
-            db.all("select senderid, receiverid, message, timestamp from messages where (senderid = ? and receiverid = ?) or (senderid = ? and receiverid = ?) order by timestamp", [userId, receiverUserId, receiverUserId, userId], (err, rows) => {
-                if(err) {
-                    console.log(err);
-                    callback([]);
-                } else {
-                    callback(rows);
-                    console.log("Переписка отправлена");
-                }
-            })
-        })
+            const [messages] = await pool.query("select senderid, receiverid, message, timestamp from messages where (senderid = ? and receiverid = ?) or (senderid = ? and receiverid = ?) order by timestamp", [userId, receiverUserId, receiverUserId, userId]);
+            callback(messages);
+            console.log("Переписка отправлена");
+        } catch (error) {
+            console.log(error);
+            callback([]);
+        }
     })
 
     socket.on("disconnect", () => {
