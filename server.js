@@ -72,13 +72,13 @@ io.on("connection", (socket) => {
             //получаем id получателя сообщения
             const receiverid = rows[0].id;
             const [result] = await pool.query("insert into messages(senderid, receiverid, message) values(?,?,?)", [senderid, receiverid, message]);
-            [rows] = await pool.query("select timestamp from messages where id = ?", [result.insertId]);
-            if(rows.length === 0) {
+            const [rows1] = await pool.query("select timestamp from messages where id = ?", [result.insertId]);
+            if(rows1.length === 0) {
                 //уведомление отправителю
                 socket.emit("error", "Получатель не найден");
                 return;
             }
-            const timestamp = rows[0].timestamp;
+            const timestamp = rows1[0].timestamp;
             //уведомление отправителю и получателю
             io.emit("newMessage", {senderid, receiverid, message, timestamp});
             console.log("Сообщение добавлено в БД и отправлено пользователям");
