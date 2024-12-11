@@ -104,8 +104,16 @@ io.on("connection", (socket) => {
 
     //отметка сообщений как прочитанных, когда открывается(или открыт) чат с пользователем
     socket.on("markAsRead", async(data) => {
-        const {userId, senderId} = data;
+        const {userId, senderName} = data;
         try {
+            const [rows] = await pool.query("select id from users where name = ?", [senderName]);
+            if(rows.length === 0) {
+                //уведомление получателю
+                socket.emit("error", "Отправитель не найден");
+                return;
+            }
+            //получаем id отправителя сообщения
+            const senderId = rows[0].id;
             await pool.query("update messages set is_read = true where receiverid = ? and senderid = ?", [userId, senderId]);
         } catch (error) {
             console.error(error);
