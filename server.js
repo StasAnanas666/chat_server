@@ -47,8 +47,11 @@ io.on("connection", (socket) => {
             } else {
                 //если пользователь не найден, добавляем нового
                 const [result] = await pool.query("insert into users(name) values(?)", [name]);
+                const newUser = {id: result.insertId, name};
                 callback({success: true, userId: result.insertId});
                 console.log("Пользователь добавлен в БД");
+                //уведомление всех пользователей о новом пользователе
+                io.emit("newUser", newUser);
             }
         } catch (error) {
             console.error(error);
@@ -71,7 +74,7 @@ io.on("connection", (socket) => {
             await pool.query("insert into messages(senderid, receiverid, message) values(?,?,?)", [senderid, receiverid, message]);
             //уведомление отправителю и получателю
             io.emit("newMessage", {senderid, receiverid, message});
-            console.log("Сообщение добалвено в БД и отправлено пользователям");
+            console.log("Сообщение добавлено в БД и отправлено пользователям");
         } catch (error) {
             console.error(error);
             //уведомление отправителю
