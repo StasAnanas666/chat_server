@@ -24,6 +24,8 @@ async function initializeDatabase() {
         console.log("Подключено к БД chat");
         await connection.query("create table if not exists users(id int primary key auto_increment, name varchar(100) unique not null)");
         await connection.query("create table if not exists messages(id int primary key auto_increment, senderid int, receiverid int, message varchar(1000), timestamp timestamp default current_timestamp, foreign key(senderid) references users(id), foreign key(receiverid) references users(id))");
+        //хранения статуса прочтения сообщения
+        await connection.query("alter table messages add is_read boolean default false");
         console.log("Таблицы успешно созданы");
         connection.release();
     } catch (error) {
@@ -71,7 +73,7 @@ io.on("connection", (socket) => {
             }
             //получаем id получателя сообщения
             const receiverid = rows[0].id;
-            const [result] = await pool.query("insert into messages(senderid, receiverid, message) values(?,?,?)", [senderid, receiverid, message]);
+            const [result] = await pool.query("insert into messages(senderid, receiverid, message, is_read) values(?,?,?,false)", [senderid, receiverid, message]);
             const [rows1] = await pool.query("select timestamp from messages where id = ?", [result.insertId]);
             if(rows1.length === 0) {
                 //уведомление отправителю
@@ -86,6 +88,27 @@ io.on("connection", (socket) => {
             console.error(error);
             //уведомление отправителю
             socket.emit("error", "Сообщение не отправлено");
+        }
+    })
+
+    //получение количества непрочитанных сообщений
+    socket.on("getUnreadMessages", async(userId, callback) => {
+        try {
+            const [rows] = await pool.query("select senderid, count(*) as unread_messages from messages where receiverid = ? and is_read = false group by senderid", [userId]);
+            callback(rows);//список отправителей с количеством непрочитанных сообщений
+        } catch (error) {
+            console.error(error);
+            callback([]);
+        }
+    })
+
+    //отметка сообщений как прочитанных, когда открывается(или открыт) чат с пользователем
+    socket.on("markAsRead", async(data) => {
+        const {userId, senderId} = data;
+        try {
+            await pool.query("update messages set is_read = true where receiverid = ? and senderid = ?", [userId, senderId]);
+        } catch (error) {
+            console.error(error);
         }
     })
 
