@@ -115,9 +115,8 @@ io.on("connection", (socket) => {
     //получение списка пользователей
     socket.on("getUsers", async(callback) => {
         try {
-            const [rows] = await pool.query("select name from users");
-            //отправляем только имена
-            callback(rows.map((row) => row.name));
+            const [rows] = await pool.query("select * from users");
+            callback(rows);
         } catch (error) {
             console.error(error);
             callback([]);
