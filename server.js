@@ -13,9 +13,9 @@ const io = new Server(server, {
 
 const pool = mysql.createPool({
     host: "sql7.freesqldatabase.com",
-    user: "sql7750782",
-    password: "d9yAiVKdJA",
-    database: "sql7750782"
+    user: "sql7752572",
+    password: "TixGAg54c5",
+    database: "sql7752572"
 })
 //инициализация БД
 async function initializeDatabase() {
